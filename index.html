@@ -3,323 +3,442 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>食品輸出価格シミュレーター｜日本→台湾</title>
+  <title>食品輸出価格シミュレーター｜日本→台湾（GFP対応）</title>
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; }
-    input[type=range] { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 3px; outline: none; cursor: pointer; }
-    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #2563eb; cursor: pointer; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
+    body { font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; background: #f0f4f8; }
+    input[type=range] { -webkit-appearance: none; appearance: none; height: 5px; border-radius: 3px; outline: none; cursor: pointer; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #2563eb; cursor: pointer; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
     input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #2563eb; cursor: pointer; border: 2px solid #fff; }
-    .tooltip-container { position: relative; display: inline-block; }
-    .tooltip-box { display: none; position: absolute; z-index: 50; left: 24px; top: -4px; width: 220px; background: #1e293b; color: #f1f5f9; font-size: 12px; border-radius: 8px; padding: 8px 12px; line-height: 1.5; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
-    .tooltip-container:hover .tooltip-box { display: block; }
-    @keyframes fadeInUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
-    .fade-in { animation: fadeInUp 0.4s ease; }
+    .tooltip-wrap { position: relative; display: inline-block; }
+    .tooltip-body { display: none; position: absolute; z-index: 100; left: 22px; top: -4px; width: 210px; background: #1e293b; color: #e2e8f0; font-size: 11.5px; border-radius: 8px; padding: 8px 10px; line-height: 1.55; pointer-events: none; box-shadow: 0 6px 20px rgba(0,0,0,0.25); }
+    .tooltip-wrap:hover .tooltip-body { display: block; }
+    @keyframes slideUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+    .slide-up { animation: slideUp 0.45s ease; }
+    select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
   </style>
 </head>
-<body class="bg-slate-100 min-h-screen">
+<body>
 <div id="root"></div>
-
 <script type="text/babel">
-const { useState, useMemo } = React;
+const { useState, useMemo, useEffect } = React;
 
-function Tooltip({ text }) {
+/* ─── GFPカテゴリーと台湾関税率 ─── */
+const GFP_CATEGORIES = [
+  { name: "菓子・スナック",       tariff: 0.20, isAlcohol: false, icon: "🍬" },
+  { name: "調味料・ソース・だし",   tariff: 0.10, isAlcohol: false, icon: "🫙" },
+  { name: "飲料・ジュース（非アル）",tariff: 0.15, isAlcohol: false, icon: "🧃" },
+  { name: "米・穀物製品",          tariff: 0.40, isAlcohol: false, icon: "🍚" },
+  { name: "水産加工品",            tariff: 0.15, isAlcohol: false, icon: "🐟" },
+  { name: "肉加工品",              tariff: 0.20, isAlcohol: false, icon: "🥩" },
+  { name: "乳製品・チーズ",         tariff: 0.20, isAlcohol: false, icon: "🧀" },
+  { name: "冷凍食品",              tariff: 0.20, isAlcohol: false, icon: "🧊" },
+  { name: "野菜・果物加工品",       tariff: 0.15, isAlcohol: false, icon: "🥫" },
+  { name: "酒類（ビール・日本酒等）",tariff: 0.40, isAlcohol: true,  icon: "🍶" },
+  { name: "その他食品",            tariff: 0.20, isAlcohol: false, icon: "🍱" },
+];
+
+const TRANSPORT_MODES = [
+  { label: "常温（LCL）",   price: 50000,  icon: "📦", color: "bg-slate-100 border-slate-300 text-slate-700" },
+  { label: "冷蔵（LCL）",   price: 100000, icon: "❄️", color: "bg-blue-50 border-blue-300 text-blue-700" },
+  { label: "冷凍（LCL）",   price: 120000, icon: "🧊", color: "bg-cyan-50 border-cyan-300 text-cyan-700" },
+];
+
+const SEG_COLORS = ["#1d4ed8","#3b82f6","#0ea5e9","#f59e0b","#f97316","#ef4444","#be185d"];
+
+/* ─── Tooltip ─── */
+function Tip({ text }) {
   return (
-    <span className="tooltip-container ml-1 align-middle">
+    <span className="tooltip-wrap ml-1 align-middle">
       <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-100 text-blue-600 text-xs font-bold cursor-help select-none border border-blue-200">?</span>
-      <span className="tooltip-box">{text}</span>
+      <span className="tooltip-body">{text}</span>
     </span>
   );
 }
 
-function SliderInput({ label, value, onChange, min, max, step, unit, tooltip, displayValue, isPercent }) {
-  const display = displayValue !== undefined ? displayValue : (isPercent ? (value * 100).toFixed(1) : value);
+/* ─── SliderRow ─── */
+function SliderRow({ label, value, onChange, min, max, step, isPercent, unit, tip }) {
   const pct = ((value - min) / (max - min)) * 100;
+  const display = isPercent
+    ? `${(value * 100).toFixed(1)}%`
+    : unit === "円" ? `¥${Number(value).toLocaleString()}`
+    : unit === "TWD" ? `${Number(value).toFixed(3)}`
+    : `${Number(value).toLocaleString()}${unit ? " " + unit : ""}`;
   return (
     <div className="mb-4">
       <div className="flex items-center justify-between mb-1">
-        <label className="text-sm font-medium text-slate-700 flex items-center">
-          {label}
-          <Tooltip text={tooltip} />
-        </label>
-        <span className="text-sm font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100 min-w-[72px] text-right tabular-nums">
-          {isPercent
-            ? `${(value * 100).toFixed(1)}%`
-            : unit === "円"
-              ? `¥${Number(value).toLocaleString()}`
-              : unit === "TWD/JPY"
-                ? `${Number(value).toFixed(3)}`
-                : `${Number(value).toLocaleString()} ${unit || ""}`}
-        </span>
+        <label className="text-sm font-medium text-slate-600 flex items-center">{label}<Tip text={tip} /></label>
+        <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-0.5 tabular-nums min-w-[68px] text-right">{display}</span>
       </div>
       <div className="flex items-center gap-2">
-        <input
-          type="range"
-          min={min} max={max} step={step}
-          value={value}
+        <input type="range" min={min} max={max} step={step} value={value}
           onChange={e => onChange(parseFloat(e.target.value))}
           className="flex-1"
-          style={{ background: `linear-gradient(to right, #2563eb ${pct}%, #cbd5e1 ${pct}%)` }}
-        />
-        <input
-          type="number"
-          min={min} max={max} step={step}
-          value={value}
+          style={{ background: `linear-gradient(to right, #2563eb ${pct}%, #cbd5e1 ${pct}%)` }} />
+        <input type="number" min={min} max={max} step={step} value={value}
           onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) onChange(Math.min(max, Math.max(min, v))); }}
-          className="w-20 text-right text-sm border border-slate-200 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300 tabular-nums"
-        />
+          className="w-20 text-right text-xs border border-slate-200 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300 tabular-nums" />
       </div>
     </div>
   );
 }
 
-function CostBar({ segments, total }) {
-  const colors = [
-    "#1d4ed8", // メーカー原価
-    "#3b82f6", // 輸出商社マージン
-    "#06b6d4", // 国際物流費
-    "#f59e0b", // 台湾関税
-    "#f97316", // 台湾営業税
-    "#ef4444", // 台湾輸入商社マージン
-    "#dc2626", // 台湾小売マージン
-  ];
+/* ─── Section Header ─── */
+function SectionHeader({ label, sub }) {
   return (
-    <div className="w-full rounded-lg overflow-hidden h-10 flex">
-      {segments.map((seg, i) => {
-        const pct = total > 0 ? (seg.value / total) * 100 : 0;
+    <div className="flex items-center gap-2 mb-4 mt-1">
+      <span className="w-1 h-5 bg-blue-600 rounded-full" />
+      <div>
+        <p className="text-sm font-bold text-slate-700">{label}</p>
+        {sub && <p className="text-xs text-slate-400">{sub}</p>}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Stacked Bar ─── */
+function StackedBar({ segments, total }) {
+  return (
+    <div className="flex rounded-lg overflow-hidden h-8 w-full shadow-inner">
+      {segments.map((s, i) => {
+        const w = total > 0 ? (s.value / total) * 100 : 0;
         return (
-          <div
-            key={i}
-            title={`${seg.label}: ¥${seg.value.toFixed(0)} (${pct.toFixed(1)}%)`}
-            style={{ width: `${pct}%`, background: colors[i] }}
-            className="relative group transition-all duration-300 cursor-pointer hover:brightness-110"
-          />
+          <div key={i} style={{ width: `${w}%`, background: SEG_COLORS[i] }}
+            title={`${s.label}: ¥${s.value.toFixed(0)} (${w.toFixed(1)}%)`}
+            className="cursor-pointer hover:brightness-110 transition-all duration-200" />
         );
       })}
     </div>
   );
 }
 
-function LegendRow({ label, jpyValue, twd, pct, color, isFirst }) {
-  return (
-    <div className={`flex items-center justify-between py-2 ${!isFirst ? "border-t border-slate-100" : ""}`}>
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ background: color }} />
-        <span className="text-sm text-slate-700 truncate">{label}</span>
-      </div>
-      <div className="flex items-center gap-3 flex-shrink-0 ml-2">
-        <span className="text-xs text-slate-500 tabular-nums">¥{jpyValue.toFixed(0)}</span>
-        <span className="text-xs font-semibold text-slate-700 tabular-nums w-20 text-right">NT${twd.toFixed(0)}</span>
-        <span className="text-xs text-slate-400 tabular-nums w-12 text-right">{pct.toFixed(1)}%</span>
-      </div>
-    </div>
-  );
-}
-
-function StepRow({ step, label, jpyValue, isHighlight }) {
-  return (
-    <div className={`flex items-center justify-between py-1.5 px-3 rounded-lg ${isHighlight ? "bg-blue-50 border border-blue-100" : ""}`}>
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-bold text-white bg-slate-400 rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">{step}</span>
-        <span className="text-sm text-slate-600">{label}</span>
-      </div>
-      <span className={`text-sm font-semibold tabular-nums ${isHighlight ? "text-blue-700" : "text-slate-700"}`}>
-        ¥{jpyValue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-      </span>
-    </div>
-  );
-}
-
+/* ─── Main App ─── */
 function App() {
-  const [jpPrice, setJpPrice] = useState(1000);
-  const [taxRate, setTaxRate] = useState(0.10);
-  const [wholesaleRate, setWholesaleRate] = useState(0.60);
-  const [exportMargin, setExportMargin] = useState(0.20);
-  const [logistics, setLogistics] = useState(100);
-  const [tariffRate, setTariffRate] = useState(0.30);
-  const [importMargin, setImportMargin] = useState(0.20);
-  const [retailMargin, setRetailMargin] = useState(0.40);
-  const [fxRate, setFxRate] = useState(0.22);
+  /* A. 商品設定 */
+  const [categoryIdx, setCategoryIdx] = useState(0);
+  const [jpPrice, setJpPrice]         = useState(500);
+  const [itemsPerBox, setItemsPerBox] = useState(12);
 
+  /* B. 物流設定 */
+  const [transportIdx, setTransportIdx] = useState(0);
+  const [transportCost, setTransportCost] = useState(50000);
+
+  /* C. 利益・税率 */
+  const [wholesaleRate, setWholesaleRate]   = useState(0.60);
+  const [exportMargin, setExportMargin]     = useState(0.20);
+  const [importMargin, setImportMargin]     = useState(0.20);
+  const [retailMargin, setRetailMargin]     = useState(0.40);
+  const [fxRate, setFxRate]                 = useState(0.22);
+
+  /* 輸送モード切替時にtransportCostをリセット */
+  useEffect(() => {
+    setTransportCost(TRANSPORT_MODES[transportIdx].price);
+  }, [transportIdx]);
+
+  const cat = GFP_CATEGORIES[categoryIdx];
+
+  /* 計算 */
   const calc = useMemo(() => {
-    const mfgPrice     = jpPrice / (1 + taxRate) * wholesaleRate;
-    const fobPrice     = mfgPrice / (1 - exportMargin);
-    const cifPrice     = fobPrice + logistics;
-    const tariff       = cifPrice * tariffRate;
-    const vat          = (cifPrice + tariff) * 0.05;
-    const importWhole  = (cifPrice + tariff + vat) / (1 - importMargin);
-    const retailJPY    = importWhole / (1 - retailMargin);
-    const retailTWD    = retailJPY * fxRate;
-    const multiplier   = jpPrice > 0 ? retailTWD / (jpPrice * fxRate) : 0;
+    const BOXES   = 48;
+    const totalUnits = BOXES * itemsPerBox;
+    const logisticsPerUnit = transportCost / totalUnits;
 
-    const segments = [
-      { label: "メーカー出荷価（原価）",   value: mfgPrice,                           twd: mfgPrice * fxRate },
-      { label: "輸出商社マージン",          value: fobPrice - mfgPrice,                twd: (fobPrice - mfgPrice) * fxRate },
-      { label: "国際物流費",               value: logistics,                           twd: logistics * fxRate },
-      { label: "台湾関税",                 value: tariff,                              twd: tariff * fxRate },
-      { label: "台湾営業税（5%）",          value: vat,                                twd: vat * fxRate },
-      { label: "台湾輸入商社マージン",       value: importWhole - (cifPrice + tariff + vat), twd: (importWhole - (cifPrice + tariff + vat)) * fxRate },
-      { label: "台湾小売マージン",          value: retailJPY - importWhole,            twd: (retailJPY - importWhole) * fxRate },
+    const mfgPrice    = jpPrice / 1.1 * wholesaleRate;
+    const fobPrice    = mfgPrice / (1 - exportMargin);
+    const cifPrice    = fobPrice + logisticsPerUnit;
+    const tariff      = cifPrice * cat.tariff;
+    const vat         = (cifPrice + tariff) * 0.05;
+    const importWhole = (cifPrice + tariff + vat) / (1 - importMargin);
+    const retailJPY   = importWhole / (1 - retailMargin);
+    const retailTWD   = retailJPY * fxRate;
+    const multiplier  = jpPrice > 0 ? retailTWD / (jpPrice * fxRate) : 0;
+
+    const segs = [
+      { label: "メーカー出荷価（原価）",   value: mfgPrice },
+      { label: "輸出商社マージン",         value: fobPrice - mfgPrice },
+      { label: "国際物流費（1個あたり）",   value: logisticsPerUnit },
+      { label: "台湾関税",                value: tariff },
+      { label: "台湾営業税（5%）",         value: vat },
+      { label: "台湾輸入商社マージン",      value: importWhole - (cifPrice + tariff + vat) },
+      { label: "台湾小売マージン",         value: retailJPY - importWhole },
     ];
 
-    return { mfgPrice, fobPrice, cifPrice, tariff, vat, importWhole, retailJPY, retailTWD, multiplier, segments };
-  }, [jpPrice, taxRate, wholesaleRate, exportMargin, logistics, tariffRate, importMargin, retailMargin, fxRate]);
-
-  const segColors = ["#1d4ed8","#3b82f6","#06b6d4","#f59e0b","#f97316","#ef4444","#dc2626"];
+    return { logisticsPerUnit, totalUnits, mfgPrice, fobPrice, cifPrice, tariff, vat, importWhole, retailJPY, retailTWD, multiplier, segs };
+  }, [jpPrice, itemsPerBox, transportCost, wholesaleRate, exportMargin, importMargin, retailMargin, fxRate, cat]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 to-blue-50 py-6 px-4">
-      {/* Header */}
-      <div className="max-w-6xl mx-auto mb-6">
+    <div className="min-h-screen py-5 px-3 sm:px-5">
+      {/* ── Header ── */}
+      <div className="max-w-5xl mx-auto mb-5">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white text-lg font-bold shadow">🍱</div>
+          <div className="w-10 h-10 bg-blue-700 rounded-xl flex items-center justify-center text-xl shadow-md">🍱</div>
           <div>
-            <h1 className="text-xl font-bold text-slate-800">食品輸出価格シミュレーター</h1>
-            <p className="text-sm text-slate-500">日本 → 台湾　現地想定販売価格（TWD）を自動計算</p>
+            <h1 className="text-lg font-extrabold text-slate-800 leading-tight">食品輸出価格シミュレーター</h1>
+            <p className="text-xs text-slate-500">GFP対応｜日本 → 台湾　LCL混載輸送コスト反映版</p>
           </div>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-5 gap-6">
+      <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-5 gap-5">
 
-        {/* ===== LEFT: Inputs ===== */}
-        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-          <h2 className="text-base font-bold text-slate-700 mb-5 flex items-center gap-2">
-            <span className="w-2 h-5 bg-blue-600 rounded-full inline-block" />
-            入力設定
-          </h2>
+        {/* ════════ LEFT: 入力 ════════ */}
+        <div className="lg:col-span-2 space-y-4">
 
-          <div className="mb-5">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">日本側コスト</p>
-            <SliderInput label="日本の店頭価格（税込）" value={jpPrice} onChange={setJpPrice}
+          {/* A. 商品・カテゴリー */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+            <SectionHeader label="A. 商品・カテゴリー設定" sub="GFP分類に基づき関税率を自動設定" />
+
+            {/* カテゴリー選択 */}
+            <div className="mb-4">
+              <label className="text-sm font-medium text-slate-600 flex items-center mb-1.5">
+                GFPカテゴリー
+                <Tip text="GFP（農林水産物・食品）の分類に基づくカテゴリーです。選択することで台湾への関税率が自動的に設定されます。" />
+              </label>
+              <div className="relative">
+                <select
+                  value={categoryIdx}
+                  onChange={e => setCategoryIdx(parseInt(e.target.value))}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-300 pr-8 cursor-pointer"
+                >
+                  {GFP_CATEGORIES.map((c, i) => (
+                    <option key={i} value={i}>{c.icon} {c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-2 flex items-center gap-2 bg-blue-50 rounded-lg px-3 py-2">
+                <span className="text-xs text-blue-600 font-medium">台湾関税率（自動）</span>
+                <span className="ml-auto text-sm font-bold text-blue-700">{(cat.tariff * 100).toFixed(0)}%</span>
+              </div>
+              {cat.isAlcohol && (
+                <div className="mt-2 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <span className="text-amber-500 text-sm mt-0.5">⚠️</span>
+                  <p className="text-xs text-amber-700 font-medium leading-snug">酒類は台湾輸入時に「酒税」が別途課税されます。本シミュレーターは酒税を含まない概算値です。実際の輸出には専門家への確認を推奨します。</p>
+                </div>
+              )}
+            </div>
+
+            <SliderRow label="日本の販売価格（税込）" value={jpPrice} onChange={setJpPrice}
               min={100} max={10000} step={50} unit="円"
-              tooltip="日本の小売店で消費者が購入する価格（税込）。すべての計算のベースとなります。" />
-            <SliderInput label="日本の消費税率" value={taxRate} onChange={setTaxRate}
-              min={0.01} max={0.15} step={0.01} isPercent
-              tooltip="現行は一般食品10%、軽減税率（飲食料品）は8%。計算では税抜き価格を求めるために使用します。" />
-            <SliderInput label="メーカー卸掛け率" value={wholesaleRate} onChange={setWholesaleRate}
+              tip="日本の小売店での消費者向け販売価格（税込10%）。すべての計算のベースになります。" />
+
+            <div className="mb-1">
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-sm font-medium text-slate-600 flex items-center">
+                  1箱あたりの入数
+                  <Tip text="100サイズ段ボール1箱に何個入るかを設定します。入数が多いほど1個あたりの物流費が下がります。" />
+                </label>
+                <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-0.5 tabular-nums">{itemsPerBox} 個</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="range" min={1} max={100} step={1} value={itemsPerBox}
+                  onChange={e => setItemsPerBox(parseInt(e.target.value))}
+                  className="flex-1"
+                  style={{ background: `linear-gradient(to right, #2563eb ${(itemsPerBox-1)/99*100}%, #cbd5e1 ${(itemsPerBox-1)/99*100}%)` }} />
+                <input type="number" min={1} max={100} step={1} value={itemsPerBox}
+                  onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setItemsPerBox(Math.min(100, Math.max(1, v))); }}
+                  className="w-20 text-right text-xs border border-slate-200 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300 tabular-nums" />
+              </div>
+              <p className="text-xs text-slate-400 mt-1">総個数: 48箱 × {itemsPerBox}個 = <span className="font-semibold text-slate-600">{(48 * itemsPerBox).toLocaleString()}個</span> / ロット</p>
+            </div>
+          </div>
+
+          {/* B. 物流設定 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+            <SectionHeader label="B. 物流設定" sub="2m³（パレット2枚）= 48箱 を最小単位とする" />
+
+            <p className="text-xs font-medium text-slate-500 mb-2">輸送モードを選択</p>
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {TRANSPORT_MODES.map((m, i) => (
+                <button key={i} onClick={() => setTransportIdx(i)}
+                  className={`flex flex-col items-center justify-center gap-1 rounded-xl border-2 py-3 px-1 text-xs font-semibold transition-all cursor-pointer ${
+                    transportIdx === i
+                      ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm"
+                      : "border-slate-200 bg-white text-slate-500 hover:border-blue-200"
+                  }`}>
+                  <span className="text-xl">{m.icon}</span>
+                  <span className="leading-tight text-center">{m.label}</span>
+                  <span className="text-xs font-bold text-slate-400">¥{m.price.toLocaleString()}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="mb-1">
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-sm font-medium text-slate-600 flex items-center">
+                  輸送費（2m³あたり）
+                  <Tip text="2m³（パレット2枚相当、48箱）の輸送費合計。輸送会社の見積もりに応じて上書き可能です。" />
+                </label>
+                <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-0.5 tabular-nums">¥{transportCost.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="range" min={10000} max={300000} step={1000} value={transportCost}
+                  onChange={e => setTransportCost(parseInt(e.target.value))}
+                  className="flex-1"
+                  style={{ background: `linear-gradient(to right, #2563eb ${(transportCost-10000)/290000*100}%, #cbd5e1 ${(transportCost-10000)/290000*100}%)` }} />
+                <input type="number" min={10000} max={300000} step={1000} value={transportCost}
+                  onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setTransportCost(Math.min(300000, Math.max(10000, v))); }}
+                  className="w-20 text-right text-xs border border-slate-200 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300 tabular-nums" />
+              </div>
+            </div>
+          </div>
+
+          {/* C. 利益・税率 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+            <SectionHeader label="C. 利益・税率設定" />
+            <SliderRow label="メーカー卸掛け率" value={wholesaleRate} onChange={setWholesaleRate}
               min={0.3} max={0.9} step={0.01} isPercent
-              tooltip="日本の定価（税抜）に対してメーカーが卸す際の掛け率。0.6なら定価の60%で卸すことを意味します。一般的に0.5〜0.7程度。" />
-          </div>
-
-          <div className="mb-5">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">輸出・物流</p>
-            <SliderInput label="輸出商社の利益率" value={exportMargin} onChange={setExportMargin}
+              tip="日本の定価（税抜）に対するメーカーの卸値の比率。0.6なら税抜定価の60%で卸します。" />
+            <SliderRow label="輸出商社の利益率" value={exportMargin} onChange={setExportMargin}
               min={0.05} max={0.50} step={0.01} isPercent
-              tooltip="輸出を担う商社がFOB価格に乗せる利益率。通貨リスクや通関コスト等を含む。一般的に15〜25%程度。" />
-            <SliderInput label="国際物流費（1個あたり）" value={logistics} onChange={setLogistics}
-              min={0} max={2000} step={10} unit="円"
-              tooltip="航空便や船便の送料・保険料をSKU1個あたりに換算した円建てコスト。商品重量や便種により大きく変動します。" />
-          </div>
-
-          <div className="mb-5">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">台湾側コスト</p>
-            <SliderInput label="台湾の関税率" value={tariffRate} onChange={setTariffRate}
-              min={0} max={1.00} step={0.01} isPercent
-              tooltip="台湾への食品輸入に課される関税率。品目によって異なり、菓子類は概ね20〜40%、加工食品は10〜40%程度。FTA締結により変動する場合あり。" />
-            <SliderInput label="台湾輸入商社の利益率" value={importMargin} onChange={setImportMargin}
+              tip="輸出商社がFOB価格に上乗せする利益率。通関・為替リスク・手数料を含みます。" />
+            <SliderRow label="台湾輸入商社の利益率" value={importMargin} onChange={setImportMargin}
               min={0.05} max={0.60} step={0.01} isPercent
-              tooltip="台湾側の輸入商社が小売業者に卸す際に乗せる利益率。現地の営業・保管・配送コストを含む。" />
-            <SliderInput label="台湾小売店の利益率" value={retailMargin} onChange={setRetailMargin}
+              tip="台湾の輸入商社が卸値に上乗せする利益率。現地倉庫・配送・営業コストを含みます。" />
+            <SliderRow label="台湾小売店の利益率" value={retailMargin} onChange={setRetailMargin}
               min={0.10} max={0.70} step={0.01} isPercent
-              tooltip="スーパーや百貨店などの小売店が設定する利益率（粗利率）。台湾のプレミアム系小売では30〜50%程度。" />
-          </div>
-
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">為替</p>
-            <SliderInput label="為替レート（JPY→TWD）" value={fxRate} onChange={setFxRate}
-              min={0.10} max={0.40} step={0.001} unit="TWD/JPY"
-              tooltip="1円が何台湾ドル（TWD）になるかの換算レート。2024年実勢は0.20〜0.23程度。銀行レートと実勢レートの差に注意。" />
+              tip="台湾の小売店（スーパー・百貨店など）が設定する粗利率。プレミアム系は30〜50%程度。" />
+            <SliderRow label="為替レート（1JPY = ? TWD）" value={fxRate} onChange={setFxRate}
+              min={0.10} max={0.40} step={0.001} unit="TWD"
+              tip="1円が何台湾ドルになるかの換算レート。2024年実勢は概ね0.20〜0.23程度です。" />
           </div>
         </div>
 
-        {/* ===== RIGHT: Results ===== */}
-        <div className="lg:col-span-3 flex flex-col gap-5">
+        {/* ════════ RIGHT: 結果 ════════ */}
+        <div className="lg:col-span-3 space-y-4">
 
-          {/* Main Result Card */}
-          <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl shadow-md p-6 text-white fade-in">
-            <p className="text-sm font-medium text-blue-200 mb-1">台湾での想定販売価格</p>
-            <div className="flex items-end gap-3 mb-3">
-              <span className="text-5xl font-extrabold tabular-nums tracking-tight">
-                NT${calc.retailTWD.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-              </span>
-            </div>
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="bg-white/15 rounded-xl px-4 py-2">
-                <p className="text-xs text-blue-200">日本定価との比較</p>
-                <p className="text-xl font-bold">
-                  日本の <span className="text-yellow-300">{calc.multiplier.toFixed(2)}倍</span>
-                </p>
+          {/* メイン結果 */}
+          <div className="bg-gradient-to-br from-blue-700 to-blue-900 rounded-2xl shadow-lg p-6 text-white slide-up">
+            <div className="flex items-start justify-between flex-wrap gap-3">
+              <div>
+                <p className="text-xs text-blue-300 font-medium mb-0.5">台湾での1個あたり想定販売価格</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-5xl sm:text-6xl font-extrabold tabular-nums tracking-tight">
+                    NT${calc.retailTWD.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </span>
+                </div>
+                <p className="text-sm text-blue-200 mt-1">= ¥{calc.retailJPY.toLocaleString(undefined, { maximumFractionDigits: 0 })}（円換算）</p>
               </div>
-              <div className="bg-white/15 rounded-xl px-4 py-2">
-                <p className="text-xs text-blue-200">円換算（台湾店頭）</p>
-                <p className="text-xl font-bold tabular-nums">¥{calc.retailJPY.toLocaleString(undefined, {maximumFractionDigits:0})}</p>
-              </div>
-              <div className="bg-white/15 rounded-xl px-4 py-2">
-                <p className="text-xs text-blue-200">日本定価（参考TWD）</p>
-                <p className="text-xl font-bold tabular-nums">NT${(jpPrice * fxRate).toFixed(0)}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Cost Breakdown Bar */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-            <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
-              <span className="w-2 h-4 bg-blue-500 rounded-full inline-block" />
-              コスト積み上げ（台湾店頭価格の内訳）
-            </h3>
-            <CostBar segments={calc.segments} total={calc.retailJPY} />
-            <div className="mt-4 divide-y divide-slate-50">
-              {calc.segments.map((seg, i) => (
-                <LegendRow
-                  key={i}
-                  label={seg.label}
-                  jpyValue={seg.value}
-                  twd={seg.twd}
-                  pct={calc.retailJPY > 0 ? (seg.value / calc.retailJPY) * 100 : 0}
-                  color={segColors[i]}
-                  isFirst={i === 0}
-                />
-              ))}
-              <div className="flex items-center justify-between py-2 font-bold">
-                <span className="text-sm text-slate-800">合計（台湾店頭価格）</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-500 tabular-nums">¥{calc.retailJPY.toFixed(0)}</span>
-                  <span className="text-sm font-bold text-blue-700 tabular-nums w-20 text-right">NT${calc.retailTWD.toFixed(0)}</span>
-                  <span className="text-xs text-slate-400 w-12 text-right">100%</span>
+              <div className="flex flex-col items-end gap-2">
+                <div className="bg-white/15 rounded-xl px-4 py-2 text-right">
+                  <p className="text-xs text-blue-300">日本定価との倍率</p>
+                  <p className="text-2xl font-extrabold text-yellow-300">{calc.multiplier.toFixed(2)}倍</p>
+                  <p className="text-xs text-blue-300">日本定価 NT${(jpPrice * fxRate).toFixed(0)}</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Step-by-step */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-            <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
-              <span className="w-2 h-4 bg-slate-400 rounded-full inline-block" />
+          {/* 物流分析 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+            <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+              <span className="text-base">{TRANSPORT_MODES[transportIdx].icon}</span>
+              物流コスト分析
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="bg-blue-50 rounded-xl p-3 text-center border border-blue-100">
+                <p className="text-xs text-blue-500 mb-1">1個あたりの物流費</p>
+                <p className="text-2xl font-extrabold text-blue-700 tabular-nums">¥{calc.logisticsPerUnit.toFixed(1)}</p>
+              </div>
+              <div className="bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
+                <p className="text-xs text-slate-500 mb-1">輸送費合計（2m³）</p>
+                <p className="text-xl font-bold text-slate-700 tabular-nums">¥{transportCost.toLocaleString()}</p>
+              </div>
+              <div className="bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
+                <p className="text-xs text-slate-500 mb-1">ロット総個数</p>
+                <p className="text-xl font-bold text-slate-700 tabular-nums">{calc.totalUnits.toLocaleString()}個</p>
+                <p className="text-xs text-slate-400">48箱 × {itemsPerBox}個</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-400 mt-3 leading-relaxed">
+              ※ 2m³（パレット2枚）の混載（LCL）輸送・{itemsPerBox}個入り箱を想定した概算です。実際の輸送費は重量・季節・航路により変動します。
+            </p>
+          </div>
+
+          {/* 価格構成チャート */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+            <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+              <span className="w-2 h-4 bg-blue-500 rounded-full" />
+              価格構成（台湾小売価格の内訳）
+            </h3>
+            <StackedBar segments={calc.segs} total={calc.retailJPY} />
+            {/* 凡例 */}
+            <div className="mt-3 space-y-0">
+              {calc.segs.map((s, i) => {
+                const pct = calc.retailJPY > 0 ? (s.value / calc.retailJPY) * 100 : 0;
+                return (
+                  <div key={i} className={`flex items-center justify-between py-1.5 ${i > 0 ? "border-t border-slate-50" : ""}`}>
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: SEG_COLORS[i] }} />
+                      <span className="text-xs text-slate-600 truncate">{s.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                      <span className="text-xs text-slate-400 tabular-nums">¥{s.value.toFixed(1)}</span>
+                      <span className="text-xs font-semibold text-slate-600 tabular-nums w-16 text-right">NT${(s.value * fxRate).toFixed(0)}</span>
+                      <div className="w-10 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: SEG_COLORS[i] }} />
+                      </div>
+                      <span className="text-xs text-slate-400 tabular-nums w-9 text-right">{pct.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="flex items-center justify-between border-t border-slate-200 pt-2 mt-1">
+                <span className="text-xs font-bold text-slate-700">合計</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400 tabular-nums">¥{calc.retailJPY.toFixed(1)}</span>
+                  <span className="text-xs font-bold text-blue-700 tabular-nums w-16 text-right">NT${calc.retailTWD.toFixed(0)}</span>
+                  <div className="w-10" />
+                  <span className="text-xs font-bold text-slate-500 w-9 text-right">100%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 計算ステップ */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+            <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+              <span className="w-2 h-4 bg-slate-300 rounded-full" />
               計算ステップ詳細
             </h3>
-            <div className="space-y-1.5">
-              <StepRow step="1" label="日本メーカー出荷価（税抜×卸掛け率）" jpyValue={calc.mfgPrice} />
-              <StepRow step="2" label="輸出商社販売価格・FOB" jpyValue={calc.fobPrice} />
-              <StepRow step="3" label="台湾輸入原価・CIF（FOB＋物流費）" jpyValue={calc.cifPrice} />
-              <StepRow step="4" label="台湾関税額（CIF×関税率）" jpyValue={calc.tariff} />
-              <StepRow step="5" label="台湾営業税（CIF＋関税）×5%" jpyValue={calc.vat} />
-              <StepRow step="6" label="台湾輸入商社卸値" jpyValue={calc.importWhole} />
-              <StepRow step="7" label="台湾店頭価格（円換算）" jpyValue={calc.retailJPY} isHighlight />
+            <div className="space-y-1">
+              {[
+                ["1", "メーカー出荷価（税抜×卸掛け率）", calc.mfgPrice, false],
+                ["2", "輸出商社価格・FOB", calc.fobPrice, false],
+                ["3", "1個あたりの物流費", calc.logisticsPerUnit, false],
+                ["4", "台湾輸入原価・CIF（FOB＋物流）", calc.cifPrice, false],
+                ["5", `台湾関税（×${(cat.tariff*100).toFixed(0)}%）`, calc.tariff, false],
+                ["6", "台湾営業税（CIF＋関税）×5%", calc.vat, false],
+                ["7", "台湾輸入商社卸値", calc.importWhole, false],
+                ["8", "台湾店頭価格（円換算）", calc.retailJPY, true],
+              ].map(([step, label, val, hl]) => (
+                <div key={step} className={`flex items-center justify-between px-3 py-1.5 rounded-lg ${hl ? "bg-blue-50 border border-blue-100" : ""}`}>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${hl ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-600"}`}>{step}</span>
+                    <span className="text-xs text-slate-600">{label}</span>
+                  </div>
+                  <span className={`text-xs font-bold tabular-nums ${hl ? "text-blue-700" : "text-slate-700"}`}>
+                    ¥{val.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                  </span>
+                </div>
+              ))}
             </div>
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between bg-blue-50 rounded-xl px-4 py-3">
-              <span className="text-sm font-bold text-blue-800">最終結果（台湾ドル）</span>
-              <span className="text-xl font-extrabold text-blue-700 tabular-nums">NT${calc.retailTWD.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
+            <div className="mt-3 flex items-center justify-between bg-blue-600 rounded-xl px-4 py-3">
+              <span className="text-sm font-bold text-white">最終結果（台湾ドル）</span>
+              <span className="text-xl font-extrabold text-yellow-300 tabular-nums">NT${calc.retailTWD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
             </div>
           </div>
 
         </div>
       </div>
 
-      <p className="text-center text-xs text-slate-400 mt-8">※ 本シミュレーターは参考値です。実際の価格は市場状況・交渉条件・物流契約等により変動します。</p>
+      {/* Footer注釈 */}
+      <div className="max-w-5xl mx-auto mt-5 space-y-1">
+        <p className="text-xs text-slate-400 text-center">※ 本シミュレーターは参考値です。実際の価格は市場状況・交渉条件・通関実務・為替動向などにより変動します。</p>
+        <p className="text-xs text-slate-400 text-center">※ 2m³（パレット2枚・48箱）の混載（LCL）輸送を想定した概算です。輸送費は輸送会社の実見積もりで上書きしてください。</p>
+      </div>
     </div>
   );
 }
